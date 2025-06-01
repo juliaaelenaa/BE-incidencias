@@ -3,23 +3,20 @@ const router = express.Router();
 const { sql, config } = require('../db');
 const bcrypt = require('bcrypt');
 
-// GET /usuarios
 router.get('/', async (req, res) => {
   try {
     const pool = await sql.connect(config);
-    const result = await pool.request().query('SELECT * FROM Usuarios');
+    const result = await pool.request().query('SELECT UsuarioID, Nombre, Correo FROM Usuarios');
     res.json(result.recordset);
   } catch (err) {
-    console.error('Error en /usuarios:', err);
     res.status(500).send(err.message);
   }
 });
 
-// POST con contraseña encriptada
 router.post('/', async (req, res) => {
   const { Nombre, Correo, Contrasena } = req.body;
   try {
-    const hashedPassword = await bcrypt.hash(Contrasena, 10); 
+    const hashedPassword = await bcrypt.hash(Contrasena, 10);
     const pool = await sql.connect(config);
     await pool.request()
       .input('Nombre', sql.NVarChar, Nombre)
@@ -32,27 +29,40 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST con verificación de contraseña encriptada
-router.post('/login', async (req, res) => {
-  const { Correo, Contrasena } = req.body;
+router.put('/:id', async (req, res) => {
+  const { id } = req.params;
+  const { Nombre, Correo, Contrasena } = req.body;
   try {
     const pool = await sql.connect(config);
-    const result = await pool.request()
-      .input('Correo', sql.NVarChar, Correo)
-      .query('SELECT * FROM Usuarios WHERE Correo = @Correo');
-
-    if (result.recordset.length === 0) {
-      return res.json({ login: false, mensaje: 'Correo no registrado' });
-    }
-
-    const usuario = result.recordset[0];
-    const isMatch = await bcrypt.compare(Contrasena, usuario.Contrasena);
-
-    if (isMatch) {
-      res.json({ login: true, usuario });
+    if (Contrasena) {
+      const hashedPassword = await bcrypt.hash(Contrasena, 10);
+      await pool.request()
+        .input('id', sql.Int, id)
+        .input('Nombre', sql.NVarChar, Nombre)
+        .input('Correo', sql.NVarChar, Correo)
+        .input('Contrasena', sql.NVarChar, hashedPassword)
+        .query('UPDATE Usuarios SET Nombre = @Nombre, Correo = @Correo, Contrasena = @Contrasena WHERE UsuarioID = @id');
     } else {
-      res.json({ login: false, mensaje: 'Contraseña incorrecta' });
+      await pool.request()
+        .input('id', sql.Int, id)
+        .input('Nombre', sql.NVarChar, Nombre)
+        .input('Correo', sql.NVarChar, Correo)
+        .query('UPDATE Usuarios SET Nombre = @Nombre, Correo = @Correo WHERE UsuarioID = @id');
     }
+    res.send('Usuario actualizado');
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await sql.connect(config);
+    await pool.request()
+      .input('id', sql.Int, id)
+      .query('DELETE FROM Usuarios WHERE UsuarioID = @id');
+    res.send('Usuario eliminado');
   } catch (err) {
     res.status(500).send(err.message);
   }
